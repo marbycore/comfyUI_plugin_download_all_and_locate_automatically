@@ -17,17 +17,41 @@ def format_size(bytes_num):
     return f"{bytes_num:.1f}TB"
 
 def is_aria2_available():
-    return shutil.which("aria2c") is not None
+    if shutil.which("aria2c"):
+        return True
+    # Try common WinGet paths for aria2 on Windows (Anonymized)
+    user_profile = os.environ.get("USERPROFILE", "")
+    winget_link = os.path.join(user_profile, "AppData", "Local", "Microsoft", "WinGet", "Links", "aria2c.exe")
+    winget_pkg = os.path.join(user_profile, "AppData", "Local", "Microsoft", "WinGet", "Packages", "aria2.aria2_Microsoft.Winget.Source_8wekyb3d8bbwe", "aria2-1.37.0-win-64bit-build1", "aria2c.exe")
+    if os.path.exists(winget_link) or os.path.exists(winget_pkg):
+        return True
+    return False
+
+def get_aria2_executable():
+    if shutil.which("aria2c"):
+        return "aria2c"
+    user_profile = os.environ.get("USERPROFILE", "")
+    winget_link = os.path.join(user_profile, "AppData", "Local", "Microsoft", "WinGet", "Links", "aria2c.exe")
+    winget_pkg = os.path.join(user_profile, "AppData", "Local", "Microsoft", "WinGet", "Packages", "aria2.aria2_Microsoft.Winget.Source_8wekyb3d8bbwe", "aria2-1.37.0-win-64bit-build1", "aria2c.exe")
+    if os.path.exists(winget_link): return winget_link
+    if os.path.exists(winget_pkg): return winget_pkg
+    return None
+
+
 
 def download_with_aria2(url, dest_path, filename):
     """Downloads using aria2c for maximum speed (multi-connection)."""
+    exe = get_aria2_executable()
+    if not exe: return False
+    
     print(f"\n  [ARIA2] Downloading: {filename}")
     
     folder = os.path.dirname(dest_path)
     os.makedirs(folder, exist_ok=True)
     
     cmd = [
-        "aria2c",
+        exe,
+
         "-x", "16",       # 16 connections per server
         "-s", "16",       # Split file into 16 parts
         "-k", "1M",       # 1MB chunks

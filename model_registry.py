@@ -22,11 +22,13 @@ BUILTIN_REGISTRY = {
         "url": "https://huggingface.co/Comfy-Org/Wan2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_i2v_720p_480p_7b_bf16.safetensors",
         "folder": "diffusion_models"
     },
-    # Stable Audio
+    # Stable Audio (Comfy-Org Mirror - No Auth required)
     "stable-audio-open-1.0.safetensors": {
-        "url": "https://huggingface.co/stabilityai/stable-audio-open-1.0/resolve/main/model.safetensors",
+        "url": "https://huggingface.co/Comfy-Org/stable-audio-open-1.0_repackaged/resolve/main/stable-audio-open-1.0.safetensors",
         "folder": "checkpoints"
     },
+
+
     "t5-base.safetensors": {
         "url": "https://huggingface.co/google-t5/t5-base/resolve/main/model.safetensors",
         "folder": "clip"
