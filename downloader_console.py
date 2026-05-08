@@ -80,25 +80,38 @@ def main():
     print("="*60)
     print(f"\n  Detected {len(missing_models)} missing models:\n")
     
+    SOURCE_LABELS = {
+        "BUILTIN":        "Built-in registry",
+        "MANAGER_LOCAL":  "ComfyUI-Manager (local cache)",
+        "MANAGER_ONLINE": "ComfyUI-Manager (online)",
+        "NOT_FOUND":      "No URL found",
+    }
+
     for m in missing_models:
         dest_path = os.path.join(models_root, m['folder'], m['filename'])
+        source    = m.get("_source", "NOT_FOUND")
+        label     = SOURCE_LABELS.get(source, source)
+
         if m.get("url"):
             print(f"  [+] {m['filename']}")
-            print(f"      URL : {m['url']}")
-            print(f"      DEST: {dest_path}")
+            print(f"      Source : {label}")
+            print(f"      URL    : {m['url']}")
+            print(f"      Save to: {dest_path}")
         else:
             print(f"  [!] {m['filename']}")
-            print(f"      URL : Not found — add it to custom_models.json")
-            print(f"      DEST: {dest_path}")
+            print(f"      Source : {label}")
+            print(f"      Save to: {dest_path}")
+            print(f"      -> Add URL to custom_models.json inside the extension folder")
         print()
     
     downloadable = [m for m in missing_models if m.get("url")]
     
     if not downloadable:
-        print("  No models with known URLs to download.")
+        print("  No models with known URLs to download automatically.")
         print("  Add missing URLs to custom_models.json inside the extension folder.")
         input("\n  Press Enter to close...")
         return
+
 
 
 

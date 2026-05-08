@@ -10,50 +10,56 @@ from aiohttp import web
 # Developer: Marbycore
 # GitHub: https://github.com/marbycore/comfyUI_plugin_download_all_and_locate_automatically
 
-# ─── MANAGER MODEL DB CACHE ──────────────────────────────────────────────────
+# ─── MANAGER MODEL DB ────────────────────────────────────────────────────────
 MANAGER_DB_URL = "https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/model-list.json"
-_manager_db_cache = None
 
-def get_manager_model_db():
+_manager_db       = {}   # populated at startup
+_manager_db_ready = threading.Event()
+
+def _load_manager_db():
     """
-    Returns a dict of {filename: model_info} from ComfyUI-Manager's database.
-    Priority: local cache file → online fetch.
+    Runs in a background thread at startup.
+    Loads from local Manager cache first, then fetches online if needed.
+    Signals _manager_db_ready when done so the first check waits properly.
     """
-    global _manager_db_cache
-    if _manager_db_cache is not None:
-        return _manager_db_cache
+    global _manager_db
 
-    db = {}
+    loaded = {}
 
-    # 1. Try local ComfyUI-Manager cache first (fastest, works offline)
+    # 1 — Local Manager cache (instant, works offline)
     try:
         manager_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ComfyUI-Manager")
         db_path = os.path.join(manager_path, "node_db", "model-list.json")
         if os.path.exists(db_path):
             with open(db_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                for m in data.get('models', []):
-                    if m.get('filename') and m.get('url'):
-                        db[m['filename']] = m
-            print(f"[AutoModelDownloader] Loaded {len(db)} models from local Manager DB")
+            for m in data.get('models', []):
+                if m.get('filename') and m.get('url'):
+                    loaded[m['filename']] = {**m, '_source': 'MANAGER_LOCAL'}
+            print(f"[AutoModelDownloader] Local Manager DB: {len(loaded)} models")
     except Exception as e:
         print(f"[AutoModelDownloader] Local Manager DB error: {e}")
 
-    # 2. Try fetching online if local was empty (runs in background, updates cache)
-    if not db:
-        try:
-            import urllib.request
-            with urllib.request.urlopen(MANAGER_DB_URL, timeout=10) as r:
-                data = json.loads(r.read().decode())
-                for m in data.get('models', []):
-                    if m.get('filename') and m.get('url'):
-                        db[m['filename']] = m
-            print(f"[AutoModelDownloader] Loaded {len(db)} models from online Manager DB")
-        except Exception as e:
-            print(f"[AutoModelDownloader] Online Manager DB error: {e}")
+    # 2 — Online fetch (fills gaps the local cache may have)
+    try:
+        import urllib.request
+        with urllib.request.urlopen(MANAGER_DB_URL, timeout=15) as r:
+            data = json.loads(r.read().decode())
+        online_added = 0
+        for m in data.get('models', []):
+            if m.get('filename') and m.get('url') and m['filename'] not in loaded:
+                loaded[m['filename']] = {**m, '_source': 'MANAGER_ONLINE'}
+                online_added += 1
+        print(f"[AutoModelDownloader] Online Manager DB: +{online_added} extra models")
+    except Exception as e:
+        print(f"[AutoModelDownloader] Online Manager DB unavailable: {e}")
 
-    _manager_db_cache = db
-    return db
+    _manager_db = loaded
+    _manager_db_ready.set()
+    print(f"[AutoModelDownloader] DB ready — {len(_manager_db)} models indexed")
+
+# Start loading in background immediately at import time
+threading.Thread(target=_load_manager_db, daemon=True, name="AutoDownloader-DBLoader").start()
 
 # ─── LOCAL PRIORITY REGISTRY ─────────────────────────────────────────────────
 try:
@@ -76,7 +82,6 @@ NODE_TO_FOLDER = {
     "UpscaleModelLoader":       "upscale_models",
     "CLIPVisionLoader":         "clip_vision",
     "IPAdapterModelLoader":     "ipadapter",
-    "PhotoMakerLoader":         "photomaker",
 }
 
 def find_model_path(filename):
@@ -92,18 +97,22 @@ def find_model_path(filename):
 
 def get_missing_models(prompt):
     """
-    Analyze a ComfyUI prompt (API format) and return a list of missing models.
-    Automatically discovers download URLs from ComfyUI-Manager's database.
+    Analyze a ComfyUI prompt and return missing models with URLs and sources.
+    Waits up to 20s for the Manager DB to be ready before checking.
     """
+    # Wait for DB to finish loading (max 20s — avoids race condition)
+    db_ready = _manager_db_ready.wait(timeout=20)
+    if not db_ready:
+        print("[AutoModelDownloader] Warning: DB not ready in time, checking with partial data")
+
     missing = []
     seen = set()
-    manager_db = get_manager_model_db()
 
     for node_id, node_data in prompt.items():
         if not isinstance(node_data, dict):
             continue
 
-        ntype = node_data.get("class_type", "")
+        ntype  = node_data.get("class_type", "")
         inputs = node_data.get("inputs", {})
         target_folder = NODE_TO_FOLDER.get(ntype)
 
@@ -118,32 +127,28 @@ def get_missing_models(prompt):
             seen.add(val)
 
             if find_model_path(val):
-                continue  # Already installed
+                continue  # already installed
 
             print(f"[AutoModelDownloader] MISSING: {val}")
 
-            # Build model entry — URL from registry, Manager DB, or unknown
-            entry = {
-                "filename": val,
-                "folder":   target_folder or "other",
-                "url":      None
-            }
+            entry = {"filename": val, "folder": target_folder or "other", "url": None, "_source": "NOT_FOUND"}
 
             if val in BUILTIN_REGISTRY:
-                entry["folder"] = BUILTIN_REGISTRY[val].get("folder", entry["folder"])
-                entry["url"]    = BUILTIN_REGISTRY[val]["url"]
-            elif val in manager_db:
-                info = manager_db[val]
-                entry["folder"] = info.get("save_path", entry["folder"])
-                entry["url"]    = info.get("url")
+                entry["folder"]  = BUILTIN_REGISTRY[val].get("folder", entry["folder"])
+                entry["url"]     = BUILTIN_REGISTRY[val]["url"]
+                entry["_source"] = "BUILTIN"
+            elif val in _manager_db:
+                info = _manager_db[val]
+                entry["folder"]  = info.get("save_path", entry["folder"])
+                entry["url"]     = info.get("url")
+                entry["_source"] = info.get("_source", "MANAGER")
 
             missing.append(entry)
 
     return missing
 
-# ─── CONSOLE LAUNCHER ────────────────────────────────────────────────────────
+# ─── CONSOLE LAUNCHER ─────────────────────────────────────────────────────────
 def launch_downloader(missing_models):
-    """Open a dedicated console window with the visual downloader."""
     script = os.path.join(os.path.dirname(__file__), "downloader_console.py")
     tmp    = os.path.join(os.path.dirname(__file__), "_pending_downloads.json")
 
@@ -163,21 +168,16 @@ def launch_downloader(missing_models):
                  f'tell application "Terminal" to do script "{" ".join(cmd)}"']
             )
         else:
-            launched = False
             for term in ["gnome-terminal", "konsole", "xfce4-terminal", "xterm"]:
                 try:
                     subprocess.Popen([term, '--', *cmd])
-                    launched = True
                     break
                 except FileNotFoundError:
                     continue
-            if not launched:
-                # Fallback: run in current console (no new window)
-                subprocess.Popen(cmd)
     except Exception as e:
         print(f"[AutoModelDownloader] Error launching console: {e}")
 
-# ─── API ENDPOINT ─────────────────────────────────────────────────────────────
+# ─── API ENDPOINT ──────────────────────────────────────────────────────────────
 @PromptServer.instance.routes.post('/auto_downloader/check')
 async def check_models(request):
     try:
@@ -198,9 +198,9 @@ async def check_models(request):
         print(f"[AutoModelDownloader] API error: {e}")
         return web.json_response({"status": "error", "message": str(e)}, status=500)
 
-# ─── COMFYUI NODE REGISTRATION ───────────────────────────────────────────────
+# ─── COMFYUI REGISTRATION ─────────────────────────────────────────────────────
 NODE_CLASS_MAPPINGS        = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 WEB_DIRECTORY              = "./js"
 
-print("\033[94m[AutoModelDownloader]\033[0m v2.1 ready — Developer: Marbycore")
+print("\033[94m[AutoModelDownloader]\033[0m v2.2 — Developer: Marbycore (loading model DB...)")
