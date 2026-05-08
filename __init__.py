@@ -31,12 +31,21 @@ def _load_manager_db():
     
     try:
         import urllib.request
+        # Main list
         with urllib.request.urlopen("https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/model-list.json", timeout=10) as r:
             data = json.loads(r.read().decode())
         for m in data.get('models', []):
             if m.get('filename') and m.get('url') and m['filename'] not in loaded:
                 loaded[m['filename']] = {**m, '_source': 'MANAGER_ONLINE'}
+        
+        # Extra list (Stable Audio, etc.)
+        with urllib.request.urlopen("https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/extra-model-list.json", timeout=10) as r:
+            data = json.loads(r.read().decode())
+        for m in data.get('models', []):
+            if m.get('filename') and m.get('url') and m['filename'] not in loaded:
+                loaded[m['filename']] = {**m, '_source': 'MANAGER_EXTRA'}
     except: pass
+
 
     _manager_db = loaded
     _manager_db_ready.set()
