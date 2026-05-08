@@ -119,31 +119,36 @@ def get_missing_models(prompt):
         for key, val in inputs.items():
             if not isinstance(val, str):
                 continue
-            if not any(val.endswith(ext) for ext in
+            if not any(val.lower().endswith(ext) for ext in
                        ['.safetensors', '.gguf', '.pt', '.bin', '.ckpt', '.pth']):
                 continue
-            if val in seen:
+            
+            # Smart Parsing: Extract filename from path (e.g. "t5\model.safetensors" -> "model.safetensors")
+            filename_only = os.path.basename(val.replace("\\", "/"))
+            
+            if filename_only in seen:
                 continue
-            seen.add(val)
+            seen.add(filename_only)
 
-            if find_model_path(val):
+            if find_model_path(filename_only):
                 continue  # already installed
 
-            print(f"[AutoModelDownloader] MISSING: {val}")
+            print(f"[AutoModelDownloader] MISSING: {filename_only} (original string: {val})")
 
-            entry = {"filename": val, "folder": target_folder or "other", "url": None, "_source": "NOT_FOUND"}
+            entry = {"filename": filename_only, "folder": target_folder or "other", "url": None, "_source": "NOT_FOUND"}
 
-            if val in BUILTIN_REGISTRY:
-                entry["folder"]  = BUILTIN_REGISTRY[val].get("folder", entry["folder"])
-                entry["url"]     = BUILTIN_REGISTRY[val]["url"]
+            if filename_only in BUILTIN_REGISTRY:
+                entry["folder"]  = BUILTIN_REGISTRY[filename_only].get("folder", entry["folder"])
+                entry["url"]     = BUILTIN_REGISTRY[filename_only]["url"]
                 entry["_source"] = "BUILTIN"
-            elif val in _manager_db:
-                info = _manager_db[val]
+            elif filename_only in _manager_db:
+                info = _manager_db[filename_only]
                 entry["folder"]  = info.get("save_path", entry["folder"])
                 entry["url"]     = info.get("url")
                 entry["_source"] = info.get("_source", "MANAGER")
 
             missing.append(entry)
+
 
     return missing
 
