@@ -1,7 +1,17 @@
 # Model Registry for ComfyUI Auto-Downloader
-# Add official/verified models here.
+# Developer: Marbycore
+# Models verified and tested. PRs welcome to add more.
 
 BUILTIN_REGISTRY = {
+    # ── Chroma ──────────────────────────────────────────────────────────────
+    "Chroma1-HD-fp8mixed.safetensors": {
+        "url": "https://huggingface.co/silveroxides/Chroma1-HD-fp8-scaled/resolve/main/Chroma1-HD-fp8mixed.safetensors",
+        "folder": "diffusion_models"
+    },
+    "Chroma1-HD-fp8mixed-final.safetensors": {
+        "url": "https://huggingface.co/silveroxides/Chroma1-HD-fp8-scaled/resolve/main/Chroma1-HD-fp8mixed-final.safetensors",
+        "folder": "diffusion_models"
+    },
     # ACE Step 1.5 (Comfy-Org public mirror)
     "acestep_v1.5_turbo.safetensors": {
         "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/diffusion_models/acestep_v1.5_turbo.safetensors",

@@ -78,21 +78,28 @@ def main():
     print("  COMFYUI AUTO MODEL DOWNLOADER")
     print("  Developer: Marbycore")
     print("="*60)
-    print(f"\n  Detected {len(missing_models)} missing models:")
+    print(f"\n  Detected {len(missing_models)} missing models:\n")
     
     for m in missing_models:
+        dest_path = os.path.join(models_root, m['folder'], m['filename'])
         if m.get("url"):
-            print(f"    [+] {m['filename']} -> models/{m['folder']}/")
+            print(f"  [+] {m['filename']}")
+            print(f"      URL : {m['url']}")
+            print(f"      DEST: {dest_path}")
         else:
-            print(f"    [!] {m['filename']} -> No URL found (add it to custom_models.json)")
+            print(f"  [!] {m['filename']}")
+            print(f"      URL : Not found — add it to custom_models.json")
+            print(f"      DEST: {dest_path}")
+        print()
     
     downloadable = [m for m in missing_models if m.get("url")]
     
     if not downloadable:
-        print("\n  No models with known URLs to download.")
-        print("  Add URLs to custom_models.json inside the extension folder.")
+        print("  No models with known URLs to download.")
+        print("  Add missing URLs to custom_models.json inside the extension folder.")
         input("\n  Press Enter to close...")
         return
+
 
 
     print(f"\n  Total downloadable: {len(downloadable)}/{len(missing_models)}")
