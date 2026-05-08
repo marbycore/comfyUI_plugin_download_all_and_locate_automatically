@@ -1,0 +1,8 @@
+{
+    "version": "1.0.0",
+    "nodes": [],
+    "description": "Developed by Marbycore. Automatically detects and downloads missing models when you open any ComfyUI workflow by tapping into ComfyUI-Manager's database.",
+    "author": "Marbycore",
+    "project_url": "https://github.com/marbycore/comfyUI_plugin_download_all_and_locate_automatically",
+    "tags": ["utility", "downloader", "automation"]
+}
