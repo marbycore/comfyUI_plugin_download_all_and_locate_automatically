@@ -100,11 +100,15 @@ def get_missing_models(data):
     Ultra-Aggressive Detection: Scans the entire JSON structure (recursive) 
     for any string that looks like a model filename.
     """
+    # Wait for DB to finish loading (max 20s — avoids race condition)
+    db_ready = _manager_db_ready.wait(timeout=20)
+    
     missing = []
     seen = set()
-    manager_db = get_manager_model_db()
+    manager_db = _manager_db  # Use the global DB loaded at startup
 
     def extract_strings(obj):
+
         """Recursively find all strings in a JSON-like object."""
         found = []
         if isinstance(obj, dict):
