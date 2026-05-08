@@ -95,62 +95,68 @@ def find_model_path(filename):
             continue
     return None
 
-def get_missing_models(prompt):
+def get_missing_models(data):
     """
-    Analyze a ComfyUI prompt and return missing models with URLs and sources.
-    Waits up to 20s for the Manager DB to be ready before checking.
+    Ultra-Aggressive Detection: Scans the entire JSON structure (recursive) 
+    for any string that looks like a model filename.
     """
-    # Wait for DB to finish loading (max 20s — avoids race condition)
-    db_ready = _manager_db_ready.wait(timeout=20)
-    if not db_ready:
-        print("[AutoModelDownloader] Warning: DB not ready in time, checking with partial data")
-
     missing = []
     seen = set()
+    manager_db = get_manager_model_db()
 
-    for node_id, node_data in prompt.items():
-        if not isinstance(node_data, dict):
+    def extract_strings(obj):
+        """Recursively find all strings in a JSON-like object."""
+        found = []
+        if isinstance(obj, dict):
+            for v in obj.values(): found.extend(extract_strings(v))
+        elif isinstance(obj, list):
+            for v in obj: found.extend(extract_strings(v))
+        elif isinstance(obj, str):
+            found.append(obj)
+        return found
+
+    all_strings = extract_strings(data)
+    
+    for val in all_strings:
+        if not any(val.lower().endswith(ext) for ext in
+                   ['.safetensors', '.gguf', '.pt', '.bin', '.ckpt', '.pth']):
             continue
+        
+        # Smart Parsing: Extract filename from path
+        filename_only = os.path.basename(val.replace("\\", "/"))
+        
+        if filename_only in seen:
+            continue
+        seen.add(filename_only)
 
-        ntype  = node_data.get("class_type", "")
-        inputs = node_data.get("inputs", {})
-        target_folder = NODE_TO_FOLDER.get(ntype)
+        if find_model_path(filename_only):
+            continue  # already installed
 
-        for key, val in inputs.items():
-            if not isinstance(val, str):
-                continue
-            if not any(val.lower().endswith(ext) for ext in
-                       ['.safetensors', '.gguf', '.pt', '.bin', '.ckpt', '.pth']):
-                continue
-            
-            # Smart Parsing: Extract filename from path (e.g. "t5\model.safetensors" -> "model.safetensors")
-            filename_only = os.path.basename(val.replace("\\", "/"))
-            
-            if filename_only in seen:
-                continue
-            seen.add(filename_only)
+        print(f"[AutoModelDownloader] MISSING: {filename_only}")
 
-            if find_model_path(filename_only):
-                continue  # already installed
+        # Basic folder detection based on extension or common patterns
+        folder = "other"
+        if ".safetensors" in filename_only.lower(): folder = "checkpoints"
+        if "vae" in filename_only.lower(): folder = "vae"
+        if "lora" in filename_only.lower(): folder = "loras"
 
-            print(f"[AutoModelDownloader] MISSING: {filename_only} (original string: {val})")
+        entry = {"filename": filename_only, "folder": folder, "url": None, "_source": "NOT_FOUND"}
 
-            entry = {"filename": filename_only, "folder": target_folder or "other", "url": None, "_source": "NOT_FOUND"}
+        if filename_only in BUILTIN_REGISTRY:
+            entry["folder"]  = BUILTIN_REGISTRY[filename_only].get("folder", entry["folder"])
+            entry["url"]     = BUILTIN_REGISTRY[filename_only]["url"]
+            entry["_source"] = "BUILTIN"
+        elif filename_only in _manager_db:
+            info = _manager_db[filename_only]
+            entry["folder"]  = info.get("save_path", entry["folder"])
+            entry["url"]     = info.get("url")
+            entry["_source"] = info.get("_source", "MANAGER")
 
-            if filename_only in BUILTIN_REGISTRY:
-                entry["folder"]  = BUILTIN_REGISTRY[filename_only].get("folder", entry["folder"])
-                entry["url"]     = BUILTIN_REGISTRY[filename_only]["url"]
-                entry["_source"] = "BUILTIN"
-            elif filename_only in _manager_db:
-                info = _manager_db[filename_only]
-                entry["folder"]  = info.get("save_path", entry["folder"])
-                entry["url"]     = info.get("url")
-                entry["_source"] = info.get("_source", "MANAGER")
-
-            missing.append(entry)
+        missing.append(entry)
 
 
     return missing
+
 
 # ─── CONSOLE LAUNCHER ─────────────────────────────────────────────────────────
 def launch_downloader(missing_models):

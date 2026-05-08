@@ -1,7 +1,7 @@
 /**
- * ComfyUI Auto-Downloader Frontend v2.5
+ * ComfyUI Auto-Downloader Frontend v2.7
  * Developer: Marbycore
- * Optimized: Uses native graph events to detect changes with zero resource impact.
+ * Ultra-Aggressive: Sends full workflow data for recursive scanning on the server.
  */
 
 import { app } from "../../scripts/app.js";
@@ -17,22 +17,13 @@ async function checkModels() {
         const workflow = graph.serialize();
         if (!workflow || !workflow.nodes || workflow.nodes.length === 0) return;
 
-        const prompt = {};
-        for (const node of workflow.nodes) {
-            if (!node.type || node.type === "Note" || node.type === "MarkdownNote") continue;
-            const inputs = {};
-            if (node.widgets_values) {
-                node.widgets_values.forEach((val, i) => { inputs[`widget_${i}`] = val; });
-            }
-            prompt[String(node.id)] = { class_type: node.type, inputs };
-        }
+        console.log(`[AutoDownloader] Change detected. Sending full workflow for analysis...`);
 
-        console.log(`[AutoDownloader] Change detected. Checking ${Object.keys(prompt).length} nodes...`);
-
+        // Send the FULL workflow object. Python will scan it recursively.
         const response = await fetch('/auto_downloader/check', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ prompt })
+            body:    JSON.stringify(workflow)
         });
 
         if (!response.ok) return;
@@ -69,22 +60,17 @@ function showToast(message, type = 'info') {
 app.registerExtension({
     name: "ComfyUI.AutoDownloader.Marbycore",
     async setup() {
-        console.log("[AutoDownloader] v2.5 loaded — Developer: Marbycore");
+        console.log("[AutoDownloader] v2.7 loaded — Developer: Marbycore");
         
-        // Hook directly into the graph's configuration event
-        // This fires every time a workflow is loaded or changed significantly.
         const originalOnConfigure = app.graph.onConfigure;
         app.graph.onConfigure = function() {
             if (originalOnConfigure) originalOnConfigure.apply(this, arguments);
-            console.log("[AutoDownloader] Graph configure event detected");
             scheduleCheck();
         };
 
-        // Initial check
         scheduleCheck();
     },
     async loadedGraphNode() {
-        // Backup hook for node-by-node loads
         scheduleCheck();
     }
 });
