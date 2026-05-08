@@ -1,12 +1,12 @@
 /**
- * ComfyUI Auto-Downloader Frontend v2.4
+ * ComfyUI Auto-Downloader Frontend v2.5
  * Developer: Marbycore
- * Reacts ONLY to workflow loads (no polling) for maximum efficiency.
+ * Optimized: Uses native graph events to detect changes with zero resource impact.
  */
 
 import { app } from "../../scripts/app.js";
 
-const CHECK_DELAY = 1000; // ms to wait after load
+const CHECK_DELAY = 1000;
 let checkTimeout = null;
 
 async function checkModels() {
@@ -17,7 +17,6 @@ async function checkModels() {
         const workflow = graph.serialize();
         if (!workflow || !workflow.nodes || workflow.nodes.length === 0) return;
 
-        // Build prompt in the format the backend expects
         const prompt = {};
         for (const node of workflow.nodes) {
             if (!node.type || node.type === "Note" || node.type === "MarkdownNote") continue;
@@ -28,7 +27,7 @@ async function checkModels() {
             prompt[String(node.id)] = { class_type: node.type, inputs };
         }
 
-        console.log(`[AutoDownloader] Checking ${Object.keys(prompt).length} nodes for missing models...`);
+        console.log(`[AutoDownloader] Change detected. Checking ${Object.keys(prompt).length} nodes...`);
 
         const response = await fetch('/auto_downloader/check', {
             method:  'POST',
@@ -40,7 +39,7 @@ async function checkModels() {
         const result = await response.json();
 
         if (result.status === 'missing') {
-            console.log(`[AutoDownloader] ${result.count} missing models — console opened`);
+            console.log(`[AutoDownloader] Missing models found! Opening Marbycore Console...`);
             showToast(`Auto-Downloader: ${result.count} missing model(s). Check the console window.`, 'warning');
         }
     } catch (err) {
@@ -67,24 +66,25 @@ function showToast(message, type = 'info') {
     setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 7000);
 }
 
-// Monkey-patching app.loadGraphData to catch EVERY workflow load
-const originalLoadGraphData = app.loadGraphData;
-app.loadGraphData = function() {
-    console.log("[AutoDownloader] app.loadGraphData triggered");
-    const result = originalLoadGraphData.apply(this, arguments);
-    scheduleCheck();
-    return result;
-};
-
 app.registerExtension({
     name: "ComfyUI.AutoDownloader.Marbycore",
     async setup() {
-        console.log("[AutoDownloader] v2.4 loaded — Developer: Marbycore");
-        // Initial check on page load
+        console.log("[AutoDownloader] v2.5 loaded — Developer: Marbycore");
+        
+        // Hook directly into the graph's configuration event
+        // This fires every time a workflow is loaded or changed significantly.
+        const originalOnConfigure = app.graph.onConfigure;
+        app.graph.onConfigure = function() {
+            if (originalOnConfigure) originalOnConfigure.apply(this, arguments);
+            console.log("[AutoDownloader] Graph configure event detected");
+            scheduleCheck();
+        };
+
+        // Initial check
         scheduleCheck();
     },
     async loadedGraphNode() {
-        // Backup hook
+        // Backup hook for node-by-node loads
         scheduleCheck();
     }
 });
