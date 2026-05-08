@@ -1,26 +1,13 @@
 /**
- * ComfyUI Auto-Downloader Frontend v2.3
+ * ComfyUI Auto-Downloader Frontend v2.4
  * Developer: Marbycore
- * Detects workflow changes reliably on every load, including subsequent loads.
+ * Reacts ONLY to workflow loads (no polling) for maximum efficiency.
  */
 
 import { app } from "../../scripts/app.js";
 
-const CHECK_DELAY = 2000;   // ms after last node load before triggering
-const POLL_INTERVAL = 1000; // ms between graph hash checks
-
-let checkTimeout   = null;
-let lastGraphHash  = null;
-let pollInterval   = null;
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function graphHash(workflow) {
-    // A lightweight fingerprint: node count + sorted node types joined
-    if (!workflow || !workflow.nodes) return "";
-    const sig = workflow.nodes.map(n => `${n.id}:${n.type}`).sort().join("|");
-    return `${workflow.nodes.length}::${sig}`;
-}
+const CHECK_DELAY = 1000; // ms to wait after load
+let checkTimeout = null;
 
 async function checkModels() {
     try {
@@ -41,7 +28,7 @@ async function checkModels() {
             prompt[String(node.id)] = { class_type: node.type, inputs };
         }
 
-        console.log(`[AutoDownloader] Checking ${Object.keys(prompt).length} nodes...`);
+        console.log(`[AutoDownloader] Checking ${Object.keys(prompt).length} nodes for missing models...`);
 
         const response = await fetch('/auto_downloader/check', {
             method:  'POST',
@@ -66,28 +53,6 @@ function scheduleCheck() {
     checkTimeout = setTimeout(checkModels, CHECK_DELAY);
 }
 
-// ── Graph change polling ──────────────────────────────────────────────────────
-// Runs every second and triggers a check whenever the graph fingerprint changes.
-// This is the most reliable way to detect any workflow switch.
-
-function startPolling() {
-    if (pollInterval) return;
-    pollInterval = setInterval(() => {
-        try {
-            const graph = app.graph;
-            if (!graph) return;
-            const workflow = graph.serialize();
-            const hash = graphHash(workflow);
-            if (hash && hash !== lastGraphHash) {
-                lastGraphHash = hash;
-                scheduleCheck();
-            }
-        } catch (_) {}
-    }, POLL_INTERVAL);
-}
-
-// ── Toast notification ────────────────────────────────────────────────────────
-
 function showToast(message, type = 'info') {
     const el = document.createElement('div');
     el.style.cssText = `
@@ -102,21 +67,24 @@ function showToast(message, type = 'info') {
     setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 7000);
 }
 
-// ── Extension registration ────────────────────────────────────────────────────
+// Monkey-patching app.loadGraphData to catch EVERY workflow load
+const originalLoadGraphData = app.loadGraphData;
+app.loadGraphData = function() {
+    console.log("[AutoDownloader] app.loadGraphData triggered");
+    const result = originalLoadGraphData.apply(this, arguments);
+    scheduleCheck();
+    return result;
+};
 
 app.registerExtension({
     name: "ComfyUI.AutoDownloader.Marbycore",
-
     async setup() {
-        console.log("[AutoDownloader] v2.3 loaded — Developer: Marbycore");
-        startPolling();   // polling covers ALL workflow changes, even edge cases
-    },
-
-    // Belt-and-suspenders: also keep the event-based hooks as backup
-    async loadedGraphNode() {
+        console.log("[AutoDownloader] v2.4 loaded — Developer: Marbycore");
+        // Initial check on page load
         scheduleCheck();
     },
-    async beforeConfigureGraph() {
+    async loadedGraphNode() {
+        // Backup hook
         scheduleCheck();
     }
 });
