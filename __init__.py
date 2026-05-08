@@ -80,28 +80,46 @@ def get_missing_models(data):
 
         if find_model_path(filename_only): continue
 
+        # --- SMART SEARCH (Exact + Fuzzy) ---
+        found_info = None
+        source = "NOT_FOUND"
+        
+        # 1. Try Exact Match
+        if filename_only in BUILTIN_REGISTRY:
+            found_info = BUILTIN_REGISTRY[filename_only]
+            source = "BUILTIN"
+        elif filename_only in _manager_db:
+            found_info = _manager_db[filename_only]
+            source = found_info.get("_source", "MANAGER")
+        
+        # 2. Try Fuzzy Match (Hyphen <-> Underscore swap)
+        if not found_info:
+            fuzzy_name = filename_only.replace("-", "_") if "-" in filename_only else filename_only.replace("_", "-")
+            if fuzzy_name in BUILTIN_REGISTRY:
+                found_info = BUILTIN_REGISTRY[fuzzy_name]
+                source = "BUILTIN (Fuzzy)"
+            elif fuzzy_name in _manager_db:
+                found_info = _manager_db[fuzzy_name]
+                source = f"{found_info.get('_source', 'MANAGER')} (Fuzzy)"
+
+        # --- ENTRY BUILDING ---
         folder = "checkpoints"
         if "vae" in filename_only.lower(): folder = "vae"
         elif "lora" in filename_only.lower(): folder = "loras"
         elif "control" in filename_only.lower(): folder = "controlnet"
+        elif "audio" in filename_only.lower(): folder = "checkpoints" # Stable Audio uses checkpoints dir
 
-        entry = {"filename": filename_only, "folder": folder, "url": None, "_source": "NOT_FOUND"}
+        entry = {"filename": filename_only, "folder": folder, "url": None, "_source": source}
 
-        if filename_only in BUILTIN_REGISTRY:
+        if found_info:
             entry.update({
-                "folder": BUILTIN_REGISTRY[filename_only].get("folder", folder),
-                "url": BUILTIN_REGISTRY[filename_only]["url"],
-                "_source": "BUILTIN"
-            })
-        elif filename_only in _manager_db:
-            m = _manager_db[filename_only]
-            entry.update({
-                "folder": m.get("save_path", folder),
-                "url": m.get("url"),
-                "_source": m.get("_source", "MANAGER")
+                "folder": found_info.get("save_path", found_info.get("folder", folder)),
+                "url": found_info.get("url"),
+                "_source": source
             })
         
         missing.append(entry)
+
     return missing
 
 def launch_downloader(missing_models):

@@ -96,6 +96,26 @@ Si la ves, la extensión está activa. Carga cualquier workflow para probarlo.
 
 La extensión encuentra las URLs de descarga automáticamente en este orden de prioridad:
 
+| Prioridad | Requisito | Notas |
+|-------------|-------|
+| ComfyUI | Cualquier versión reciente |
+| Python 3.9+ | Incluido con ComfyUI |
+| `requests` | Pre-instalado con ComfyUI |
+| **aria2c** | **(Muy Recomendado)** para descargas 10 veces más rápidas (multi-conexión) |
+| ComfyUI-Manager | Opcional pero recomendado para máxima cobertura de URLs |
+
+---
+
+### ⚡ Acelerando las descargas (Aria2c)
+
+Para descargas ultra-rápidas (16 conexiones simultáneas), instala `aria2c` en tu sistema:
+
+- **Windows**: Abre PowerShell como Admin y ejecuta: `winget install aria2.aria2`
+- **Linux**: `sudo apt install aria2`
+- **macOS**: `brew install aria2`
+
+La extensión detectará automáticamente `aria2c` y lo usará si está disponible.
+
 | Prioridad | Fuente | Cobertura |
 |-----------|--------|-----------|
 | 1 | `model_registry.py` local | Cache curado (ACE-Step, Wan 2.2, SeedVR2…) |

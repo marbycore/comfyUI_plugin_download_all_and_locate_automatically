@@ -141,7 +141,21 @@ Supported folder values:
 | ComfyUI | Any recent version |
 | Python 3.9+ | Included with ComfyUI |
 | `requests` | Pre-installed with ComfyUI |
+| **aria2c** | **(Highly Recommended)** for 10x faster downloads (multi-connection) |
 | ComfyUI-Manager | Optional but recommended for maximum URL coverage |
+
+---
+
+### ⚡ Speeding up downloads (Aria2c)
+
+For ultra-fast downloads (16 simultaneous connections), install `aria2c` on your system:
+
+- **Windows**: Open PowerShell as Admin and run: `winget install aria2.aria2`
+- **Linux**: `sudo apt install aria2`
+- **macOS**: `brew install aria2`
+
+The extension will automatically detect `aria2c` and use it.
+
 
 ---
 
